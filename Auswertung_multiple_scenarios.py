@@ -34,8 +34,12 @@ def multiple_jdl(inp_df):
 # de02_scens = results.fetch_scenarios('/home/dbeier/reegis/scenarios/deflex/2014/results_cbc/DB', sc_filter={'map':'de02'})
 # de02_scens.sort()
 
+#de17_scens = results.fetch_scenarios('/home/dbeier/reegis/scenarios/deflex/2014/results_cbc/DB', sc_filter={'map':'de17'})
+#de17_scens.sort()
+
 de21_scens = results.fetch_scenarios('/home/dbeier/reegis/scenarios/deflex/2014/results_cbc/DB', sc_filter={'map':'de21'})
 de21_scens.sort()
+
 
 scens_dict={}
 for i in range(0, len(de21_scens)):
@@ -47,17 +51,28 @@ scens = [x for x in scens_dict.keys()]
 
 # Jahresdauerlinie der Strompreise / Emissionen im Vergleich
 
-erg_em, erg_mcp, em_total, new_df= pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+erg_em, erg_mcp, em_total, new_df, em_mean= pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
 for n in scens:
-    es = scens_dict.get(n)
-    cost_em = upstream_analysis.get_emissions_and_costs(es, with_chp=True)
+    cost_em = upstream_analysis.get_emissions_and_costs(scens_dict.get(n), with_chp=True)
     #tmp_em, tmp_mcp= cost_em.emission.sort_values(ascending=False), cost_em.mcp.sort_values(ascending=False)
     erg_em[n] = cost_em.emission
     erg_mcp[n] = cost_em.mcp
     em_total[n] = cost_em.emission_absolute
+    mrbb = results.get_multiregion_bus_balance(scens_dict.get(n)).groupby(level=[0, 3], axis=1).sum()
+    EE = mrbb.DE01['ee'] + mrbb.DE02['ee']
+    share_ee = EE / mrbb.DE01['electricity']
+    tmp = (1 - share_ee) * cost_em.emission
+    em_mean[n] = tmp
     #plt.plot(np.arange(8760),tmp_em)
     #plt.plot(np.arange(8760),tmp_mcp)
+
+# Plot 0: Mittlere Emissionen
+plt_df = multiple_jdl(em_mean)
+plt.figure(); plt.plot(plt_df)
+plt.title('Mittlere Emissionen Strommix', size='large')
+plt.xlabel('Stunde des Jahres', size='large'); plt.ylabel('Emissionen in g/kWh', size='large')
+plt.legend(scens); plt.grid()
 
 # Plot 1: Mittlere Emissionen
 new_df = multiple_jdl(erg_em)
