@@ -3,12 +3,10 @@ import os
 import reegis
 import my_reegis
 import time
-import oemof.solph as solph
 from my_reegis import alternative_scenarios
 import deflex
 import pandas as pd
 import numpy as np
-import matplotlib
 from reegis import config as cfg
 from my_reegis import results
 from my_reegis import reegis_plot
@@ -17,90 +15,94 @@ from my_reegis import plots_de21
 from matplotlib import pyplot as plt
 import oemof_visio as oev
 
-cfg.init(paths=[os.path.dirname(deflex.__file__),
-                os.path.dirname(my_reegis.__file__)])
+#cfg.init(paths=[os.path.dirname(deflex.__file__),
+#                os.path.dirname(my_reegis.__file__)])
 
-# # Schritt 1a: Erstelle ein Szenario aus Daten aus dem Internet
+
+cfg.init()
+
+exit(0)
+# # Schritt 1a: Erstelle ein Szenario mit Reegis aus Daten aus dem Internet
 year = 2014 # Zur Wahl stehen 2014, 2013, 2012
-# #geom = 'de21' # Geometrien sind de02, de17, de21, de22
-# #p = deflex.basic_scenario.create_basic_scenario(year, rmap=my_rmap )
+geom = 'de21' # Geometrien sind de02, de17, de21, de22
+#p = deflex.basic_scenario.create_basic_scenario(year, rmap=geom )
 
-# for geom in ['de02']:
-#     for inc_fac in [1.55]:
-#         # Schritt 1b: Alternativ: Lade vorhandenes Szenario
-#         name = '{0}_{1}_{2}'.format('deflex', year, geom)
-#         path = os.path.join(cfg.get('paths', 'scenario'), 'deflex', str(year))
-#         csv_dir = name + '_csv'
-#         csv_path = os.path.join(path, csv_dir)
-#         meta = {'year': year,
-#                 'model_base': 'deflex',
-#                 'map': geom,              #
-#                 'solver': cfg.get('general', 'solver')}
-#         sc = deflex.Scenario(name=name, year=2014, meta=meta)
-#         sc.load_csv(csv_path)
-#
-#
-#         # Schritt 2: Manipuliere Daten, um gewünschtes Szenario zu erhalten
-#         # Erhöhe Anteil EE
-#         #inc_fac = 1
-#         alternative_scenarios.increase_re_share(sc, inc_fac)
-#         # Reduziere Kraftwerkspark (Kernkraft, Braun- und Steinkohle)
-#         alternative_scenarios.reduce_power_plants(sc, lignite = 0)
-#         # Füge Gas Kapazitäten hinzu
-#         #alternative_scenarios.add_one_gas_turbine(sc, nominal_value=20000)
-#         # Erhöhe WP-Anteil -> Fehlermeldung, ggf. muss Kennlinie eingegeben werden
-#         #alternative_scenarios.more_heat_pumps(sc,heat_pump_fraction=0.5, cop=2.5)
-#
-#         # Schritt 3: Bereite Berechnung vor
-#         # Schreibe die Table Collection in das Energiesystemobjekt
-#         sc.table2es()
-#         # Erstelle Optimierungsmodell
-#         sc.create_model()
-#
-#         # setze emission limit 25% weniger
-#         em_limit = 181869813461 * 0,75
-#
-#
-#         def generic_integral_limitdflx(om, keyword, flows=None, limit=None):
-#             if flows is None:
-#                 flows = {}
-#                 for (i, o) in om.flows:
-#                     if hasattr(om.flows[i, o], keyword):
-#                         flows[(i, o)] = om.flows[i, o]
-#
-#             else:
-#                 for (i, o) in flows:
-#                     if not hasattr(flows[i, o], keyword):
-#                         raise AttributeError(
-#                             ('Flow with source: {0} and target: {1} '
-#                              'has no attribute {2}.').format(
-#                                 i.label, o.label, keyword))
-#
-#             limit_name = "integral_limit_" + keyword
-#
-#             setattr(om, limit_name, po.Expression(
-#                 expr=sum(om.flow[inflow, outflow, t]
-#                          * om.timeincrement[t]
-#                          * sequence(getattr(flows[inflow, outflow], keyword))[t]
-#                          for (inflow, outflow) in flows
-#                          for t in om.TIMESTEPS)))
-#
-#             setattr(om, limit_name + "_constraint", po.Constraint(
-#                 expr=(getattr(om, limit_name) <= limit)))
-#
-#             return om
-#
-#         # emission absolute aus szenarienrechnung: 181869813461
-#         generic_integral_limitdflx(sc.model, keyword='emission', limit=em_limit)
-#
-#         # Löse das Optimierungsmodell
-#         sc.solve()
-#         # Speichere den Dump
-#         res_path = os.path.join(path, 'results_{0}'.format(cfg.get('general', 'solver')),'DB')
-#         os.makedirs(res_path, exist_ok=True)
-#         inc_fac_str = str(int(inc_fac*100))
-#         out_file = os.path.join(res_path, name + '_' + inc_fac_str +  '.esys')
-#         sc.dump_es(out_file)
+for geom in ['de02']:
+    for inc_fac in [1.55]:
+        # Schritt 1b: Alternativ: Lade vorhandenes Szenario
+        name = '{0}_{1}_{2}'.format('deflex', year, geom)
+        path = os.path.join(cfg.get('paths', 'scenario'), 'deflex', str(year))
+        csv_dir = name + '_csv'
+        csv_path = os.path.join(path, csv_dir)
+        meta = {'year': year,
+                'model_base': 'deflex',
+                'map': geom,              #
+                'solver': cfg.get('general', 'solver')}
+        sc = deflex.Scenario(name=name, year=2014, meta=meta)
+        sc.load_csv(csv_path)
+
+
+        # Schritt 2: Manipuliere Daten, um gewünschtes Szenario zu erhalten
+        # Erhöhe Anteil EE
+        #inc_fac = 1
+        alternative_scenarios.increase_re_share(sc, inc_fac)
+        # Reduziere Kraftwerkspark (Kernkraft, Braun- und Steinkohle)
+        alternative_scenarios.reduce_power_plants(sc, lignite = 0)
+        # Füge Gas Kapazitäten hinzu
+        #alternative_scenarios.add_one_gas_turbine(sc, nominal_value=20000)
+        # Erhöhe WP-Anteil -> Fehlermeldung, ggf. muss Kennlinie eingegeben werden
+        #alternative_scenarios.more_heat_pumps(sc,heat_pump_fraction=0.5, cop=2.5)
+
+        # Schritt 3: Bereite Berechnung vor
+        # Schreibe die Table Collection in das Energiesystemobjekt
+        sc.table2es()
+        # Erstelle Optimierungsmodell
+        sc.create_model()
+
+        # setze emission limit 25% weniger
+        em_limit = 181869813461 * 0,75
+
+
+        def generic_integral_limitdflx(om, keyword, flows=None, limit=None):
+            if flows is None:
+                flows = {}
+                for (i, o) in om.flows:
+                    if hasattr(om.flows[i, o], keyword):
+                        flows[(i, o)] = om.flows[i, o]
+
+            else:
+                for (i, o) in flows:
+                    if not hasattr(flows[i, o], keyword):
+                        raise AttributeError(
+                            ('Flow with source: {0} and target: {1} '
+                             'has no attribute {2}.').format(
+                                i.label, o.label, keyword))
+
+            limit_name = "integral_limit_" + keyword
+
+            setattr(om, limit_name, po.Expression(
+                expr=sum(om.flow[inflow, outflow, t]
+                         * om.timeincrement[t]
+                         * sequence(getattr(flows[inflow, outflow], keyword))[t]
+                         for (inflow, outflow) in flows
+                         for t in om.TIMESTEPS)))
+
+            setattr(om, limit_name + "_constraint", po.Constraint(
+                expr=(getattr(om, limit_name) <= limit)))
+
+            return om
+
+        # emission absolute aus szenarienrechnung: 181869813461
+        generic_integral_limitdflx(sc.model, keyword='emission', limit=em_limit)
+
+        # Löse das Optimierungsmodell
+        sc.solve()
+        # Speichere den Dump
+        res_path = os.path.join(path, 'results_{0}'.format(cfg.get('general', 'solver')),'DB')
+        os.makedirs(res_path, exist_ok=True)
+        inc_fac_str = str(int(inc_fac*100))
+        out_file = os.path.join(res_path, name + '_' + inc_fac_str +  '.esys')
+        sc.dump_es(out_file)
 
 
 # Schritt 4: Analyse der Ergebnisse
