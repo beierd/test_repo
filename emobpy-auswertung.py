@@ -47,39 +47,51 @@ def get_charging_profiles_from_database(path):
     P_balanced = ch_profiles_balanced.sum(axis=1)
 
 
-    # Summenprofil für Ladeleistung (23 to 8)
-    ch_profiles_23to8 = pd.DataFrame()
-    for k in keys_23to8:
-        tmp = manager.db[k]["timeseries"]["charge_grid"]
-        ch_profiles_23to8 = pd.concat([ch_profiles_23to8, tmp], axis=1)
+    # # Summenprofil für Ladeleistung (23 to 8)
+    # ch_profiles_23to8 = pd.DataFrame()
+    # for k in keys_23to8:
+    #     tmp = manager.db[k]["timeseries"]["charge_grid"]
+    #     ch_profiles_23to8 = pd.concat([ch_profiles_23to8, tmp], axis=1)
+    #
+    # P_23to8 = ch_profiles_23to8.sum(axis=1)
+    #
+    #
+    # # Summenprofil für Ladeleistung (0 to 24)
+    # ch_profiles_0to24 = pd.DataFrame()
+    # for k in keys_0to24:
+    #     tmp = manager.db[k]["timeseries"]["charge_grid"]
+    #     ch_profiles_0to24 = pd.concat([ch_profiles_0to24, tmp], axis=1)
+    #
+    # P_0to24 = ch_profiles_0to24.sum(axis=1)
 
-    P_23to8 = ch_profiles_23to8.sum(axis=1)
+    # P_sum = pd.concat([P_immediate, P_balanced, P_23to8, P_0to24], axis=1)
+    # P_sum.columns = ['immediate', 'balanced', '23to8', '0to24']
 
-
-    # Summenprofil für Ladeleistung (0 to 24)
-    ch_profiles_0to24 = pd.DataFrame()
-    for k in keys_0to24:
-        tmp = manager.db[k]["timeseries"]["charge_grid"]
-        ch_profiles_0to24 = pd.concat([ch_profiles_0to24, tmp], axis=1)
-
-    P_0to24 = ch_profiles_0to24.sum(axis=1)
-
-    P_sum = pd.concat([P_immediate, P_balanced, P_23to8, P_0to24], axis=1)
-    P_sum.columns = ['immediate', 'balanced', '23to8', '0to24']
+    P_sum = pd.concat([P_immediate, P_balanced], axis=1)
+    P_sum.columns = ['immediate', 'balanced']
 
     return P_sum
 
 
-#path = '/home/dbeier/git-projects/emobpy_examples/casestudy/500ev/'
-#P_immediate_500ev, P_balanced_500ev, P_23to8_500ev, P_0to24_500ev = get_charging_profiles_from_database(path)
+path = '/home/dbeier/git-projects/emobpy_examples/casestudy/500ev/'
+P_500ev = get_charging_profiles_from_database(path)
+P_500ev.to_csv('P_500ev.csv')
 
-#path = '/home/dbeier/git-projects/emobpy_examples/casestudy/db'
-#P_immediate_200ev, P_balanced_200ev, P_23to8_200ev, P_0to24_200ev = get_charging_profiles_from_database(path)
+path = '/home/dbeier/git-projects/emobpy_examples/casestudy/1000ev/'
+P_1000ev = get_charging_profiles_from_database(path)
+P_1000ev.to_csv('P_1000ev.csv')
 
-path = '/home/dbeier/git-projects/emobpy_examples/casestudy/test123'
-Charging_profiles_test = get_charging_profiles_from_database(path)
+path = '/home/dbeier/git-projects/emobpy_examples/casestudy/2500ev/'
+P_2500ev = get_charging_profiles_from_database(path)
+P_2500ev.to_csv('P_2500ev.csv')
 
-#Charging_profiles_test.to_csv('test123.csv')
+path = '/home/dbeier/git-projects/emobpy_examples/casestudy/5000ev/'
+P_5000ev = get_charging_profiles_from_database(path)
+P_5000ev.to_csv('P_5000ev.csv')
+
+
+
+
 
 
 
