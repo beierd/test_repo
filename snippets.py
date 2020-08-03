@@ -1,6 +1,8 @@
 import sys, os, yaml
 import argparse
 import pandas as pd
+from sklearn import preprocessing
+
 
 def load_yaml(path_to_file):
   stream = open(path_to_file, 'r')
@@ -79,6 +81,15 @@ def plt_jdl(input):
     plt_jdl = series.iloc[:, 1]
 
     return plt_jdl
+
+
+def normalize_timeseries(input):
+    x = input.reshape(-1, 1)
+    min_max_scaler = preprocessing.MinMaxScaler()
+    x_scaled = min_max_scaler.fit_transform(x)
+    x_norm = pd.DataFrame(x_scaled)
+
+    return x_norm
 
 #search_string = 'base_year'
 #path_to_file = '/home/dbeier/git-projects/disaggregator/disaggregator/config.yaml'

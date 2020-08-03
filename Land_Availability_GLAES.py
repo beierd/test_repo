@@ -7,7 +7,7 @@ from disaggregator import data, plot
 import geopandas as gpd
 import integrate_demandregio
 
-#DE = '/home/dbeier/git-projects/reegis/reegis/data/geometries/germany_polygon.geojson'
+DE = '/home/dbeier/git-projects/reegis/reegis/data/geometries/germany_polygon.geojson'
 #BB = '/home/dbeier/Downloads/BB_shapes/Brandenburg-Landkreise.shp'
 #deflex = '/home/dbeier/git-projects/deflex/deflex/data/geometries/region_polygons_de02.geojson'
 #BE = '/home/dbeier/Downloads/BB_shapes/bezirksgrenzen.geojson'
@@ -68,8 +68,11 @@ def calculate_wind_sites(region, invert=False, separation=700, name='NoRegion', 
                 }
 
         # Apply selected exclusion criteria
-        for key in selExlWind:
-            ecWind.excludePrior(pr[key], value=ecWind.typicalExclusions[key])
+        # for key in selExlWind:
+        #     ecWind.excludePrior(pr[key], value=ecWind.typicalExclusions[key])
+
+        for key in selExlWind.keys():
+            ecWind.excludePrior(key, value=selExlWind[key])
 
         # Placement Algorithm
         ecWind.distributeItems(separation=separation, outputSRS=4326, asArea=asArea)
@@ -134,13 +137,13 @@ def calculate_wind_area(region):
                 "protected_habitat_proximity": (None, 5 ), # UBA 2013
                 "protected_landscape_proximity": (None, 5 ), # UBA 2013
                 "protected_natural_monument_proximity": (None, 200 ), # UBA 2013
-                "protected_park_proximity": (None, 5 ), # UBA 2013
+                "protected_park_proximity": (None, 5), # UBA 2013
                 "protected_reserve_proximity": (None, 200 ), # UBA 2013
                 "protected_wilderness_proximity": (None, 200 ), # UBA 2013
                 "camping_proximity": (None, 900),       # UBA 2013)
                 #"touristic_proximity": (None, 800),
                 #"leisure_proximity": (None, 1000),
-                "railway_proximity": (None, 250 ),      # Diss WB
+                "railway_proximity": (None, 250),      # Diss WB
                 "river_proximity": (None, 5 ),        # Abweichung vom standardwert (200)
                 "roads_proximity": (None, 80 ),         # Diss WB
                 "roads_main_proximity": (None, 80 ),    # Diss WB
@@ -152,8 +155,8 @@ def calculate_wind_area(region):
                 #"slope_north_facing_threshold": (3, None ),
                 "wetland_proximity": (None, 5 ), # Diss WB / UBA 2013
                 "waterbody_proximity": (None, 5 ), # Diss WB / UBA 2013
-                "windspeed_100m_threshold": (None, 4.5 ),
-                "windspeed_50m_threshold": (None, 4.5 ),
+                "windspeed_100m_threshold": (None, 5.5),  # Wert angepasst. Bei Nabenhöhe >100m realistisch?
+                #"windspeed_50m_threshold": (None, 4.5),
                 "woodland_proximity": (None, 0 ),     # Abweichung vom standardwert (300) / Diss WB
                 "woodland_coniferous_proximity": (None, 0 ), # Abweichung vom standardwert (300)
                 "woodland_deciduous_proximity": (None, 0 ), # Abweichung vom standardwert (300)
@@ -161,8 +164,11 @@ def calculate_wind_area(region):
                 }
 
         # Apply selected exclusion criteria
-        for key in selExlWind:
-            ecWind.excludePrior(pr[key], value=ecWind.typicalExclusions[key])
+        # for key in selExlWind:
+        #     ecWind.excludePrior(pr[key], value=ecWind.typicalExclusions[key])
+
+        for key in selExlWind.keys():
+            ecWind.excludePrior(key, value=selExlWind[key])
 
         area = ecWind.areaAvailable
 
@@ -295,10 +301,15 @@ def get_pv_wind_areas_by_nuts3(path, create_geojson=False):
 
         return suitable_area
 
+#de_area, ecWind = calculate_wind_area(DE)
+#(de_area/1e6) / 357000
+
+
+
 #wind_pv_area = get_pv_wind_areas_by_nuts3('/home/dbeier/git-projects/db_test_repo/nuts3_geojson/', create_geojson=True)
 
 # Define path where nuts3 regions are stored oder should be stored
-#path = '/home/dbeier/git-projects/db_test_repo/nuts3_geojson/'
+#path = '/home/dbeier/git-projects/test_repo/nuts3_geojson/'
 
 # Only necessary if nuts3 vektor files are not created yet
 #save_nuts3_to_geojson(path)
@@ -358,8 +369,8 @@ selExlPV = {
         "slope_north_facing_threshold": (3, None ),
         "wetland_proximity": (None, 5 ), # Diss WB / UBA 2013
         "waterbody_proximity": (None, 5 ), # Diss WB / UBA 2013
-        #"windspeed_100m_threshold": (None, 4.5 ),
-        #"windspeed_50m_threshold": (None, 4.5 ),
+        "windspeed_100m_threshold": (None, 4.5 ),
+        "windspeed_50m_threshold": (None, 4.5 ),
         "woodland_proximity": (None, 0 ),     # Abweichung vom standardwert (300) / Diss WB
         "woodland_coniferous_proximity": (None, 0 ), # Abweichung vom standardwert (300)
         "woodland_deciduous_proximity": (None, 0 ), # Abweichung vom standardwert (300)
