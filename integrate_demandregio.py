@@ -1,49 +1,38 @@
 from disaggregator import data, config, spatial, temporal
-from reegis import geometries as geo
+from reegis import geometries as geo, config as cfg
 from deflex import geometries as geo_deflex
 import pandas as pd
-import logging
+import logging, os
 
 
-def get_nutslist_per_zone(region_sel, zones='de22'):
+def get_nutslist_for_regions(regions):
     """
     Parameters
     ----------
-    region_sel : String
-        Abbreviations of Federal States of Germany
-        Valid options for fed_states are: HH, NI, MV, SH, ST, RP, HB, NW, BW, BY, SL, TH, BB, BE, HE, SN
-        Valid options for de22 are: DE01-DE22
-    zones : String
-        Choose regional divison of Germany: 'de22' for dena power network zones and 'fed_states' for federal states
+    regions = Geodataframe
+        Geodataframe containing the geometry where NUTS-regions should be mapped to
 
-    Returns: list
-        List of nuts3 regions inside the chosen federal state
+    Returns: DataFrame
+        List of nuts3 regions for all zones in the overall geometry
     -------
     """
     # Fetch NUTS3-geometries from disaggregator database
     nuts3_disaggregator = data.database_shapes()
+
     # Transform CRS System to match reegis geometries
+    nuts_centroid = nuts3_disaggregator.centroid.to_crs(4326)
     nuts_geo = nuts3_disaggregator.to_crs(crs=4326)
 
-    if zones == 'fed_states':
-        # Fetch geometries of German Federal States from reegis
-        map = geo.get_federal_states_polygon()
-    elif zones == 'de22':
-        map = geo_deflex.deflex_regions(rmap='de22', rtype='polygons')
-
     # Match NUTS3-regions with federal states
-    nuts_geo = geo.spatial_join_with_buffer(nuts_geo.centroid, map, 'fs')
+    nuts_geo = geo.spatial_join_with_buffer(nuts_centroid , regions, 'fs', limit=0)
+
     # Create dictionary with lists of all NUTS3-regions for each state
-    nuts = {}
-    nuts = nuts.fromkeys(map.index)
+    mapped_nuts = pd.DataFrame(index=regions.index, columns=["nuts"])
 
-    for zone in map.index:
-        nuts[zone] = list(nuts_geo.loc[nuts_geo['fs'] == zone].index)
+    for zone in regions.index:
+        mapped_nuts.loc[zone, "nuts"] = list(nuts_geo.loc[nuts_geo['fs'] == zone].index)
 
-    # Get list of NUTS3-regions for state of interest
-    outputlist = nuts[region_sel]
-
-    return outputlist
+    return mapped_nuts
 
 
 def get_demandregio_hhload_by_NUTS3_profile(year, region_pick, method='SLP'):
@@ -81,31 +70,43 @@ def get_demandregio_hhload_by_NUTS3_profile(year, region_pick, method='SLP'):
     return df
 
 
-def get_demandregio_electricity_consumption_by_nuts3(year, region_pick):
+def get_demandregio_electricity_consumption_by_nuts3(year, region_pick=None):
     """
     Parameters
     ----------
     year : int
-        Year of interest
+        Year of interest, so far only 2015 and 2016 are valid inputs
     region_pick : list
-        Selected regions in NUTS-3 format
-    weight_by_income : bool
-        Choose whether electricity demand shall be weighted by household income
+        Selected regions in NUTS-3 format, if None function will return demand for all regions
 
     Returns: pd.DataFrame
         Dataframe containing aggregated yearly load (households, CTS and industry) for selection
     -------
     """
-    data.cfg["base_year"] = year # Works unfortunately just for 2015 due to limited availability of householdpower
-    ec_hh = spatial.disagg_households_power(by='households', weight_by_income=True).sum(axis=1) * 1000
-    ec_CTS_detail = spatial.disagg_CTS_industry(sector='CTS', source='power', use_nuts3code=True)
-    ec_CTS = ec_CTS_detail.sum()
-    ec_industry_detail = spatial.disagg_CTS_industry(sector='industry', source='power', use_nuts3code=True)
-    ec_industry = ec_industry_detail.sum()
+    if region_pick is None:
+        region_pick = data.database_shapes().index # Select all NUTS3 Regions
 
-    ec_sum = pd.concat([ec_hh, ec_CTS, ec_industry], axis=1)
-    ec_sum.columns = ['households', 'CTS', 'industry']
-    ec_sel = ec_sum.loc[region_pick]
+    fn_pattern = "elc_consumption_by_nuts3_{year}.csv".format(year=year)
+    fn = os.path.join(cfg.get("paths", "disaggregator"), fn_pattern)
+
+    if not os.path.isfile(fn):
+        # Works unfortunately just for 2015, 2016 due to limited availability of householdpower
+        data.cfg["base_year"] = year
+        ec_hh = spatial.disagg_households_power(by='households', weight_by_income=True).sum(axis=1) * 1000
+        ec_CTS_detail = spatial.disagg_CTS_industry(sector='CTS', source='power', use_nuts3code=True)
+        ec_CTS = ec_CTS_detail.sum()
+        ec_industry_detail = spatial.disagg_CTS_industry(sector='industry', source='power', use_nuts3code=True)
+        ec_industry = ec_industry_detail.sum()
+
+        ec_sum = pd.concat([ec_hh, ec_CTS, ec_industry], axis=1)
+        ec_sum.columns = ['households', 'CTS', 'industry']
+        ec_sum.to_csv(fn)
+        ec_sel = ec_sum.loc[region_pick]
+
+    else:
+        ec_sum = pd.read_csv(fn)
+        ec_sum.set_index('Unnamed: 0', drop=True, inplace=True)
+        ec_sel = ec_sum.loc[region_pick]
 
     return ec_sel
 
@@ -186,7 +187,6 @@ def get_industry_heating_hotwater(year, region_pick):
     -------
     """
 
-
     # Define year of interest
     data.cfg['base_year'] = year
     # Get gas consumption of defined year and divide by gas-share in end energy use for heating
@@ -239,32 +239,115 @@ def get_industry_CTS_process_heat(year, region_pick):
     return df
 
 
-def get_combined_heatload_for_region(year, region_pick):
-    # only applicable for 2015, 2016
-    tmp0 = get_household_heatload_by_NUTS3(year, region_pick) # Nur bis 2016
-    tmp1 = get_CTS_heatload(year, region_pick) # 2015 - 2035 (projection)
-    tmp2 = get_industry_heating_hotwater(year, region_pick)
-    tmp3 = get_industry_CTS_process_heat(year, region_pick)
+def get_combined_heatload_for_region(year, region_pick=None):
+    """
+    Parameters
+    ----------
+    year : int
+        Year of interest, so far only 2015 and 2016 are valid inputs
+    region_pick : list
+        Selected regions in NUTS-3 format, if None function will return demand for all regions
 
-    df_heating = pd.concat([tmp0, tmp1, tmp2, tmp3], axis=1)
-    df_heating.columns = ['Households', 'CTS', 'Industry', 'ProcessHeat']
+    Returns: pd.DataFrame
+        Dataframe containing aggregated yearly low temperature heat demand (households, CTS, industry) as well
+        as high temperature heat demand (ProcessHeat) for selection
+    -------
+    """
+    if region_pick is None:
+        nuts3_index = data.database_shapes().index # Select all NUTS3 Regions
+
+    fn_pattern = "heat_consumption_by_nuts3_{year}.csv".format(year=year)
+    fn = os.path.join(cfg.get("paths", "disaggregator"), fn_pattern)
+
+
+    if not os.path.isfile(fn):
+        tmp0 = get_household_heatload_by_NUTS3(year, nuts3_index)  # Nur bis 2016
+        tmp1 = get_CTS_heatload(year, nuts3_index)  # 2015 - 2035 (projection)
+        tmp2 = get_industry_heating_hotwater(year, nuts3_index)
+        tmp3 = get_industry_CTS_process_heat(year, nuts3_index)
+
+        df_heating = pd.concat([tmp0, tmp1, tmp2, tmp3], axis=1)
+        df_heating.columns = ['Households', 'CTS', 'Industry', 'ProcessHeat']
+        df_heating.to_csv(fn)
+
+    else:
+        df_heating = pd.read_csv(fn)
+        df_heating.set_index('nuts3', drop=True, inplace=True)
 
     return df_heating
 
 
-def get_hp_shares():
-    # Diese Funktion macht vermutlich überhaupt keinen Sinn
-    qdem, age_structure = spatial.disagg_households_heatload_DB(how='bottom-up', weight_by_income=True)
-    share_hp = pd.DataFrame(index=age_structure.index, columns=['share_hp35', 'share_hp55','share_hp75'])
+def aggregate_heat_by_region(regions, year, heat_data=None):
+    """
+    Parameters
+    ----------
+    regions: GeoDataFrame
+        Geodataframe with Polygon(s) to which NUTS3-heat-demand should be mapped
+    year : int
+        Year of interest, so far only 2015 and 2016 are valid inputs
+    region_pick : list
+        Selected regions in NUTS-3 format, if None function will return demand for all regions
 
-    for idx in share_hp.index:
-        share_hp.loc[idx]['share_hp35'] = age_structure.loc[idx]['F_>2000'] / age_structure.loc[idx].sum()
-        share_hp.loc[idx]['share_hp55'] = (age_structure.loc[idx]['E_1996-2000'] +
-                                           age_structure.loc[idx]['D_1986-1995']) / age_structure.loc[idx].sum()
-        share_hp.loc[idx]['share_hp75'] = age_structure.loc[idx]['A_<1948'] / age_structure.loc[idx].sum()
+    Returns: pd.DataFrame
+        Dataframe containing aggregated yearly low temperature heat demand (households, CTS, industry) as well
+        as high temperature heat demand (ProcessHeat) for region selection
+    -------
+    """
+    if heat_data is None:
+        heat_data = get_combined_heatload_for_region(year)
 
-    return share_hp
+    agg_heat = pd.DataFrame(index=regions.index, columns=['lt-heat', 'ht-heat'])
+    nuts3_list = get_nutslist_for_regions(regions)
+
+    for zone in regions.index:
+        idx = nuts3_list.loc[zone]['nuts']
+        agg_heat.loc[zone]['lt-heat'] = (heat_data['Households']+heat_data['CTS']+
+                                           heat_data['Industry'])[idx].sum()
+        agg_heat.loc[zone]['ht-heat'] = heat_data['ProcessHeat'][idx].sum()
+
+    return agg_heat
 
 
+def aggregate_power_by_region(regions, year, elc_data=None):
+    """
+    Parameters
+    ----------
+    regions: GeoDataFrame
+        Geodataframe with Polygon(s) to which NUTS3-power-demand should be mapped
+    year : int
+        Year of interest, so far only 2015 and 2016 are valid inputs
+    region_pick : list
+        Selected regions in NUTS-3 format, if None function will return demand for all regions
+
+    Returns: pd.DataFrame
+        Dataframe containing aggregated yearly power demand (households, CTS and industry) for region selection
+    -------
+    """
+    if elc_data is None:
+        elc_data = get_demandregio_electricity_consumption_by_nuts3(year)
+
+    agg_power = pd.DataFrame(index=regions.index, columns=['households', 'CTS', 'industry'])
+    nuts3_list = get_nutslist_for_regions(regions)
+
+    for zone in regions.index:
+        idx = nuts3_list.loc[zone]['nuts']
+        agg_power.loc[zone]['households'] = elc_data['households'][idx].sum()
+        agg_power.loc[zone]['CTS'] = elc_data['CTS'][idx].sum()
+        agg_power.loc[zone]['industry'] = elc_data['industry'][idx].sum()
+
+    return agg_power
 
 
+regions = geo_deflex.deflex_regions(rmap='de22')
+
+#test_el = get_demandregio_electricity_consumption_by_nuts3(2016)
+#test_heat = get_combined_heatload_for_region(2016)
+
+aggtest1 = aggregate_power_by_region(regions, 2015)
+aggtest2 = aggregate_power_by_region(regions, 2016)
+aggtest3 = aggregate_heat_by_region(regions, 2015)
+aggtest4 = aggregate_heat_by_region(regions, 2016)
+
+
+#power_DE22 = aggregate_power_by_region(regions, 2015)
+#heat_DE22 = aggregate_heat_by_region(regions, 2015)

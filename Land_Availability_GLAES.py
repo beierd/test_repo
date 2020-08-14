@@ -1,112 +1,26 @@
 import glaes as gl
-from glaes import Priors as pr
 import pandas as pd
-import geokit
-from reegis import geometries as geom
-from disaggregator import data, plot
+import os
+from disaggregator import data
+from deflex import geometries as geo_deflex
 import geopandas as gpd
 import integrate_demandregio
-
-DE = '/home/dbeier/git-projects/reegis/reegis/data/geometries/germany_polygon.geojson'
-#BB = '/home/dbeier/Downloads/BB_shapes/Brandenburg-Landkreise.shp'
-#deflex = '/home/dbeier/git-projects/deflex/deflex/data/geometries/region_polygons_de02.geojson'
-#BE = '/home/dbeier/Downloads/BB_shapes/bezirksgrenzen.geojson'
+from reegis import config as cfg
 
 
-def calculate_wind_sites(region, invert=False, separation=700, name='NoRegion', convert2epsg=False, asArea=False):
-        # Choose Region
-        ecWind = gl.ExclusionCalculator(region, srs=3035, pixelSize=100, limitOne=False)
+def save_nuts3_to_geojson(path):
+        # Apparently this doesn't work with geopandas 0.8.0 but with geopandas 0.4.1
+        nuts3_gdf = data.database_shapes()
 
-        # Define Exclusion Criteria
-        selExlWind = {
-                "access_distance": (5000, None ),
-                #"agriculture_proximity": (None, 50 ),
-                #"agriculture_arable_proximity": (None, 50 ),
-                #"agriculture_pasture_proximity": (None, 50 ),
-                #"agriculture_permanent_crop_proximity": (None, 50 ),
-                #"agriculture_heterogeneous_proximity": (None, 50 ),
-                "airfield_proximity": (None, 1760 ),    # Diss WB
-                "airport_proximity": (None, 5000 ),     # Diss WB
-                "connection_distance": (10000, None ),
-                #"dni_threshold": (None, 3.0 ),
-                "elevation_threshold": (1500, None ),
-                #"ghi_threshold": (None, 3.0 ),
-                "industrial_proximity": (None, 250 ),  # Diss Wingenbach / UBA 2013
-                "lake_proximity": (None, 0 ),
-                "mining_proximity": (None, 100 ),
-                "ocean_proximity": (None, 10 ),
-                "power_line_proximity": (None, 120 ),   # Diss WB
-                "protected_biosphere_proximity": (None, 5 ), # UBA 2013
-                "protected_bird_proximity": (None, 200 ), # UBA 2013
-                "protected_habitat_proximity": (None, 5 ), # UBA 2013
-                "protected_landscape_proximity": (None, 5 ), # UBA 2013
-                "protected_natural_monument_proximity": (None, 200 ), # UBA 2013
-                "protected_park_proximity": (None, 5 ), # UBA 2013
-                "protected_reserve_proximity": (None, 200 ), # UBA 2013
-                "protected_wilderness_proximity": (None, 200 ), # UBA 2013
-                "camping_proximity": (None, 900),       # UBA 2013)
-                #"touristic_proximity": (None, 800),
-                #"leisure_proximity": (None, 1000),
-                "railway_proximity": (None, 250 ),      # Diss WB
-                "river_proximity": (None, 5 ),        # Abweichung vom standardwert (200)
-                "roads_proximity": (None, 80 ),         # Diss WB
-                "roads_main_proximity": (None, 80 ),    # Diss WB
-                "roads_secondary_proximity": (None, 80 ),# Diss WB
-                #"sand_proximity": (None, 5 ),
-                "settlement_proximity": (None, 600 ),   # Diss WB
-                "settlement_urban_proximity": (None, 1000 ),
-                "slope_threshold": (10, None ),
-                #"slope_north_facing_threshold": (3, None ),
-                "wetland_proximity": (None, 5 ), # Diss WB / UBA 2013
-                "waterbody_proximity": (None, 5 ), # Diss WB / UBA 2013
-                "windspeed_100m_threshold": (None, 4.5 ),
-                "windspeed_50m_threshold": (None, 4.5 ),
-                "woodland_proximity": (None, 0 ),     # Abweichung vom standardwert (300) / Diss WB
-                "woodland_coniferous_proximity": (None, 0 ), # Abweichung vom standardwert (300)
-                "woodland_deciduous_proximity": (None, 0 ), # Abweichung vom standardwert (300)
-                "woodland_mixed_proximity": (None, 0 ) # Abweichung vom standardwert (300)
-                }
+        if not os.path.isdir(path):
+                os.mkdir(path)
 
-        # Apply selected exclusion criteria
-        # for key in selExlWind:
-        #     ecWind.excludePrior(pr[key], value=ecWind.typicalExclusions[key])
-
-        for key in selExlWind.keys():
-            ecWind.excludePrior(key, value=selExlWind[key])
-
-        # Placement Algorithm
-        ecWind.distributeItems(separation=separation, outputSRS=4326, asArea=asArea)
-
-        # Extract and convert site coords of turbines
-        site_coords = pd.DataFrame(ecWind.itemCoords)
-        site_coords.columns = ['latitude','longitude']
-        site_coords_gdf = geom.create_geo_df(site_coords, wkt_column=None, lon_column="longitude", lat_column='latitude')
-
-        # Convert2epsg for plotting purposes
-        if convert2epsg==True:
-                trsf= site_coords_gdf["geometry"]
-                site_coords_gdf_epsg3857 = trsf.to_crs(epsg=3857)
-
-                # Save coords in EPSG3587 to hard disk
-                site_coords_gdf_epsg3857.to_file("site_coordsWind_epsg3857_" + name + ".geojson", driver='GeoJSON')
-                site_coords_gdf.to_file("site_coordsWind_WGS84_" + name + ".geojson", driver='GeoJSON')
-
-        elif convert2epsg==False:
-                site_coords_gdf.to_file("site_coordsWind_WGS84_" + name + ".geojson", driver='GeoJSON')
-
-        # Write turbines to power plants df
-        res_df_Wind = pd.DataFrame(columns=["energy_source_level_1", "energy_source_level_2", "technology",
-                                "electrical_capacity", "lon", "lat", "data_source"])
-
-        res_df_Wind["lon"] = site_coords["latitude"]
-        res_df_Wind["lat"] = site_coords["longitude"]
-        res_df_Wind["energy_source_level_1"] = 'Renewable energy'
-        res_df_Wind["energy_source_level_2"] = 'Wind'
-        res_df_Wind["technology"] = 'Onshore'
-        res_df_Wind["electrical_capacity"] = 3.5
-        res_df_Wind["data_source"] = 'GLAES'
-
-        return res_df_Wind, ecWind
+        for i, r in nuts3_gdf.iterrows():
+            gs = gpd.GeoSeries()
+            gs[i] = r["geometry"]
+            gs.crs="epsg:25832"
+            #gs.to_file(os.path.join(path, str(i) + '.geojson'), driver='GeoJSON')
+            gs.to_file(path + '/' + str(i) + '.geojson', driver='GeoJSON')
 
 
 def calculate_wind_area(region):
@@ -175,34 +89,23 @@ def calculate_wind_area(region):
         return area
 
 
-def save_nuts3_to_geojson(path):
-        # Apparetnly this works only with geopandas 0.4.1
-        nuts3_gdf = data.database_shapes()
-
-        for i, r in nuts3_gdf.iterrows():
-            gs = gpd.GeoSeries()
-            gs[i] = r["geometry"]
-            gs.crs="epsg:25832"
-            gs.to_file(path + str(i) + '.geojson', driver='GeoJSON')
-
-
 def calc_wind_pv_areas(path):
         nuts3_gdf = data.database_shapes()
         list_filenames = list()
         suitable_area = pd.DataFrame(index=nuts3_gdf.index, columns=["wind_area", "pv_area"])
 
         for nuts3_name in nuts3_gdf.index:
-                list_filenames.append(path + nuts3_name +'.geojson')
+                list_filenames.append(path+ '/' + nuts3_name +'.geojson')
 
         #list_filenames = list_filenames[0:20]
 
         for n in list_filenames:
-                idx = n[len(path):len(path)+5]
+                idx = n[len(path)+1:len(path)+6]
                 area_wind = calculate_wind_area(n)
                 suitable_area["wind_area"][idx] = area_wind
 
         for n in list_filenames:
-                idx = n[len(path):len(path) + 5]
+                idx = n[len(path)+1:len(path) + 6]
                 area_pv = calculate_pv_area(n)
                 suitable_area["pv_area"][idx] = area_pv
 
@@ -235,53 +138,7 @@ def calculate_pv_area(region):
         return area_pv
 
 
-def calculate_PV_sites(region, invert=True, separation=1000, name='NoRegion', convert2epsg=True):
-        # Choose Region
-        ecPV = gl.ExclusionCalculator(region, srs=3035, pixelSize=100, limitOne=False)
-
-        # Apply selected exclusion criteria
-        ecPV.excludePrior(pr.settlement_proximity, value=None)
-        ecPV.excludePrior(pr.settlement_urban_proximity, value=None)
-        ecPV.excludePrior(pr.industrial_proximity, value=None)
-
-        # Placement Algorithm
-        ecPV.distributeItems(separation=separation, invert=invert, outputSRS=4326)
-
-        # Extract and convert site coords of turbines
-        site_coords = pd.DataFrame(ecPV.itemCoords)
-        site_coords.columns = ['latitude','longitude']
-        site_coords_gdf = geom.create_geo_df(site_coords, wkt_column=None, lon_column="longitude", lat_column='latitude')
-
-        # Convert2epsg for plotting purposes
-        if convert2epsg==True:
-                trsf= site_coords_gdf["geometry"]
-                site_coords_gdf_epsg3857 = trsf.to_crs(epsg=3857)
-
-                # Save coords in EPSG3587 to hard disk
-                site_coords_gdf_epsg3857.to_file("site_coordsPV_epsg3857_" + name + ".geojson", driver='GeoJSON')
-                site_coords_gdf.to_file("site_coordsPV_WGS84_" + name + ".geojson", driver='GeoJSON')
-        elif convert2epsg==False:
-                site_coords_gdf.to_file("site_coordsPV_WGS84_" + name + ".geojson", driver='GeoJSON')
-
-        # Calculate Power per Site in MW
-        p_mean = 300000 / len(site_coords) #Total possible PV-Power in MW divided by site count
-
-        # Write turbines to power plants df
-        res_df_PV = pd.DataFrame(columns=["energy_source_level_1", "energy_source_level_2", "technology",
-                                "electrical_capacity", "lon", "lat", "data_source"])
-
-        res_df_PV["lon"] = site_coords["latitude"]
-        res_df_PV["lat"] = site_coords["longitude"]
-        res_df_PV["energy_source_level_1"] = 'Renewable energy'
-        res_df_PV["energy_source_level_2"] = 'Solar'
-        res_df_PV["technology"] = 'Photovoltaics'
-        res_df_PV["electrical_capacity"] = p_mean
-        res_df_PV["data_source"] = 'GLAES'
-
-        return res_df_PV, ecPV
-
-
-def get_pv_wind_areas_by_nuts3(path, create_geojson=False):
+def get_pv_wind_areas_by_nuts3(create_geojson=False):
         """
         Parameters
         ----------
@@ -294,12 +151,90 @@ def get_pv_wind_areas_by_nuts3(path, create_geojson=False):
             Dataframe containing yearly heat CTS heat consumption by NUTS-3 region
         -------
         """
+        path = os.path.join(cfg.get("paths", "GLAES"), 'nuts3_geojson')
+
         if create_geojson:
                 save_nuts3_to_geojson(path)
 
-        suitable_area = calc_wind_pv_areas(path)
+        fn = os.path.join(cfg.get("paths", "GLAES"), 'suitable_area_wind_pv.csv')
+
+        if not os.path.isfile(fn):
+                suitable_area = calc_wind_pv_areas(path)
+                suitable_area.to_csv(fn)
+        else:
+                suitable_area = pd.read_csv(fn)
+                suitable_area.set_index('nuts3', drop=True, inplace=True)
 
         return suitable_area
+
+
+def get_pv_wind_capacity_potential_by_nuts3(pwind_per_m2=8, psolar_per_m2=200, suitable_area=None):
+
+        fn = os.path.join(cfg.get("paths", "GLAES"), 'suitable_area_wind_pv.csv')
+
+        if suitable_area is None:
+                if not os.path.isfile(fn):
+                        # Calculate PV and Wind areas
+                        path = os.path.join(cfg.get("paths", "GLAES"), 'nuts3_geojson')
+                        if not os.path.isdir(path):
+                                mkjson=True
+                                suitable_area = get_pv_wind_areas_by_nuts3(create_geojson=True)
+                        else:
+                                suitable_area = get_pv_wind_areas_by_nuts3()
+
+                else:
+                        # Read PV and Wind areas from file
+                        suitable_area = pd.read_csv(fn)
+                        suitable_area.set_index('nuts3', drop=True, inplace=True)
+
+        # Calculate maximum installable capacity with assumptions
+        P_max_wind = suitable_area['wind_area'] * (pwind_per_m2 /1e6) # Convert W to MW
+        P_max_pv = suitable_area['pv_area'] * (psolar_per_m2 /1e6) # Convert W to MW
+
+        P_max = pd.DataFrame(index=suitable_area.index, columns=["P_wind", "P_pv"])
+        P_max["P_wind"] = P_max_wind
+        P_max["P_pv"] = P_max_pv
+
+        # Store results in reegis directory if it does not exist
+        outfile = os.path.join(cfg.get("paths", "GLAES"), 'wind_pv_capacity_per_NUTS3.csv')
+        if not os.path.isfile(outfile):
+                P_max.to_csv(outfile)
+
+        return P_max
+
+
+def aggregate_capacity_by_region(regions, P_max=None):
+
+        fn = os.path.join(cfg.get("paths", "GLAES"), 'wind_pv_capacity_per_NUTS3.csv')
+
+        if P_max is None:
+                if not os.path.isfile(fn):
+                        # Calculate PV and Wind potential
+                        P_max = get_pv_wind_capacity_potential_by_nuts3()
+
+                else:
+                        # Read PV and Wind potential from file
+                        P_max =  pd.read_csv(fn)
+                        P_max.set_index('nuts3', drop=True, inplace=True)
+
+        agg_capacity = pd.DataFrame(index=regions.index, columns=["P_wind", "P_pv"])
+        nuts3_list = integrate_demandregio.get_nutslist_for_regions(regions)
+
+        for zone in regions.index:
+                idx = nuts3_list.loc[zone]['nuts']
+                agg_capacity.loc[zone]['P_wind'] = P_max['P_wind'][idx].sum()
+                agg_capacity.loc[zone]['P_pv'] = P_max['P_pv'][idx].sum()
+
+        return agg_capacity
+
+regions = geo_deflex.deflex_regions(rmap='de17', rtype='polygons')
+P_wind_pv = aggregate_capacity_by_region(regions)
+#suitable_area = get_pv_wind_areas_by_nuts3()
+
+
+#path = os.path.join(cfg.get("paths", "GLAES"), 'nuts3_geojson')
+#test = calc_wind_pv_areas(path)
+
 
 #de_area, ecWind = calculate_wind_area(DE)
 #(de_area/1e6) / 357000
@@ -327,53 +262,5 @@ def get_pv_wind_areas_by_nuts3(path, create_geojson=False):
 
 
 
-# PV-Freiflächenpotenzial nach Wingenbach / UBA 2013
-selExlPV = {
-        "access_distance": (5000, None ),
-        #"agriculture_proximity": (None, 50 ),
-        "agriculture_arable_proximity": (None, 50 ),
-        #"agriculture_pasture_proximity": (None, 50 ),
-        #"agriculture_permanent_crop_proximity": (None, 50 ),
-        #"agriculture_heterogeneous_proximity": (None, 50 ),
-        "airfield_proximity": (None, 5 ),    # Diss WB
-        "airport_proximity": (None, 5 ),     # Diss WB
-        "connection_distance": (10000, None ),
-        "dni_threshold": (None, 3.0 ),
-        "elevation_threshold": (1500, None ),
-        #"ghi_threshold": (None, 3.0 ),
-        "industrial_proximity": (None, 0 ),  # Diss Wingenbach / UBA 2013
-        "lake_proximity": (None, 5 ),
-        "mining_proximity": (None, 100 ),
-        "ocean_proximity": (None, 10 ),
-        "power_line_proximity": (None, 120 ),   # Diss WB
-        "protected_biosphere_proximity": (None, 5 ), # UBA 2013
-        "protected_bird_proximity": (None, 5 ), # UBA 2013
-        "protected_habitat_proximity": (None, 5 ), # UBA 2013
-        "protected_landscape_proximity": (None, 5 ), # UBA 2013
-        "protected_natural_monument_proximity": (None, 5 ), # UBA 2013
-        "protected_park_proximity": (None, 5 ), # UBA 2013
-        "protected_reserve_proximity": (None, 5 ), # UBA 2013
-        "protected_wilderness_proximity": (None, 5 ), # UBA 2013
-        "camping_proximity": (None, 500),       # UBA 2013)
-        #"touristic_proximity": (None, 800),
-        #"leisure_proximity": (None, 1000),
-        "railway_proximity": (None, 5 ),      # Diss WB
-        "river_proximity": (None, 5 ),        # Abweichung vom standardwert (200)
-        "roads_proximity": (None, 80 ),         # Diss WB
-        "roads_main_proximity": (None, 80 ),    # Diss WB
-        "roads_secondary_proximity": (None, 80 ),# Diss WB
-        #"sand_proximity": (None, 5 ),
-        "settlement_proximity": (None, 600 ),   # Diss WB
-        "settlement_urban_proximity": (None, 1000 ),
-        #"slope_threshold": (10, None ),
-        "slope_north_facing_threshold": (3, None ),
-        "wetland_proximity": (None, 5 ), # Diss WB / UBA 2013
-        "waterbody_proximity": (None, 5 ), # Diss WB / UBA 2013
-        "windspeed_100m_threshold": (None, 4.5 ),
-        "windspeed_50m_threshold": (None, 4.5 ),
-        "woodland_proximity": (None, 0 ),     # Abweichung vom standardwert (300) / Diss WB
-        "woodland_coniferous_proximity": (None, 0 ), # Abweichung vom standardwert (300)
-        "woodland_deciduous_proximity": (None, 0 ), # Abweichung vom standardwert (300)
-        "woodland_mixed_proximity": (None, 0 ) # Abweichung vom standardwert (300)
-        }
+
 

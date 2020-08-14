@@ -8,24 +8,20 @@ import os
 
 
 #data.cfg['base_year'] = 2015
-nuts3_regions = list(config.dict_region_code(keys='natcode_nuts3', values='name').keys())
-nuts3_regions[0:2]=[]
+nuts3_regions = data.database_shapes().index
 
 # Fetch electricity consumption for all NUTS3-Regions
-elc_consumption = integrate_demandregio.get_demandregio_electricity_consumption_by_nuts3(2015, nuts3_regions)
-data.cfg["base_year"] = 2014
-ec_hh = spatial.disagg_households_power(by='households', weight_by_income=True).sum(axis=1) * 1000
-elc_consumption['households'] = ec_hh
+elc_consumption = integrate_demandregio.get_demandregio_electricity_consumption_by_nuts3(2015)
 
 # Fetch heat consumption for all NUTS3-Regions
-heat_consumption = integrate_demandregio.get_combined_heatload_for_region(2015, nuts3_regions)
-heat_hh = integrate_demandregio.get_household_heatload_by_NUTS3(2014, nuts3_regions, how='top-down')
-heat_consumption['Households'] = heat_hh
+heat_consumption = integrate_demandregio.get_combined_heatload_for_region(2015)
 
 # Load suitable PV/Wind-areas from csv
 filename = os.getcwd() + '/GLAES_Eignungsflaechen_Wind_PV_own_assumptions.csv'
 suitable_area = pd.read_csv(filename)
 suitable_area.set_index('nuts3', drop=True, inplace=True)
+
+
 
 # Alternatively if no precalculation is available:
 # path = os.getcwd() + '/nuts3_geojson/'
@@ -40,6 +36,8 @@ p_per_qm_pv = 200 / 1e6 # 200 W/m² Fläche -> eta=20%
 P_max_wind = suitable_area['wind_area'] * p_per_qm_wind
 P_max_pv = suitable_area['pv_area'] * p_per_qm_pv
 
+P_wind_pv = Land_Availability_GLAES.aggregate_capacity_by_region(regions)
+
 
 calc_de17 = True
 calc_de22 = True
@@ -49,9 +47,11 @@ if calc_de17:
 
     de17_list = geo_reegis.get_federal_states_polygon().index
     dflx_input_fedstates = pd.DataFrame(index=de17_list, columns = ['power','lt-heat','ht-heat','P_wind', 'P_pv'])
+    fed_states = geo_reegis.get_federal_states_polygon()
+    mapped_nuts = integrate_demandregio.get_nutslist_for_regions(fed_states)
 
     for zone in de17_list:
-        region_pick = integrate_demandregio.get_nutslist_per_zone(region_sel=zone, zones='fed_states')
+        region_pick = mapped_nuts[zone]
         dflx_input_fedstates.loc[zone]['power'] = elc_consumption.sum(axis=1)[region_pick].sum()
         dflx_input_fedstates.loc[zone]['lt-heat'] = (heat_consumption['Households']+heat_consumption['CTS']+heat_consumption['Industry'])[region_pick].sum()
         dflx_input_fedstates.loc[zone]['ht-heat'] = heat_consumption['ProcessHeat'][region_pick].sum()

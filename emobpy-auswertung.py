@@ -1,9 +1,9 @@
 from emobpy import Mobility, Availability, Charging, DataBase
-from emobpy.plot import NBplot  # Only for visualization for single time series
 import pandas as pd
-from matplotlib import pyplot as plt
 import snippets, os
-from sklearn import preprocessing
+import numpy as np
+from reegis import config as cfg
+
 
 def get_charging_profiles_from_database(path):
 
@@ -26,7 +26,7 @@ def get_charging_profiles_from_database(path):
         test = manager.db[k]["timeseries"]["consumption"]
         driving_profiles = pd.concat([driving_profiles, test], axis=1)
 
-    cum_profile = driving_profiles.sum(axis=1)
+    #cum_profile = driving_profiles.sum(axis=1)
 
 
     # Summenprofil für Ladeleistung (immediate)
@@ -72,150 +72,74 @@ def get_charging_profiles_from_database(path):
 
     return P_sum
 
-# This part will take a long time and needs a lot of memory (>100G)
-#path = '/home/dbeier/git-projects/emobpy_examples/casestudy/500ev/'
-#P_500ev = get_charging_profiles_from_database(path)
-#P_500ev.to_csv('P_500ev.csv')
 
-# path = '/home/dbeier/git-projects/emobpy_examples/casestudy/1000ev/'
-# P_1000ev = get_charging_profiles_from_database(path)
-# P_1000ev.to_csv('P_1000ev.csv')
-#
-# path = '/home/dbeier/git-projects/emobpy_examples/casestudy/2500ev/'
-# P_2500ev = get_charging_profiles_from_database(path)
-# P_2500ev.to_csv('P_2500ev.csv')
-#
-# path = '/home/dbeier/git-projects/emobpy_examples/casestudy/5000ev/'
-# P_5000ev = get_charging_profiles_from_database(path)
-# P_5000ev.to_csv('P_5000ev.csv')
-
-
-def load_and_compare_charging_of_fleets():
-    # Read files, cut off initial charging and normalize between 0 and 1
-    p500 = pd.read_csv('P_500ev.csv', index_col='Unnamed: 0')
-    p500.iloc[0:48] = p500.iloc[48:96].values
-    p500_immediate = normalize_timeseries(p500['immediate'].values)
-    p500_balanced = normalize_timeseries(p500['balanced'].values)
-
-    p1000 = pd.read_csv('P_1000ev.csv', index_col='Unnamed: 0')
-    p1000.iloc[0:48] = p1000.iloc[48:96].values
-    p1000_immediate = normalize_timeseries(p1000['immediate'].values)
-    p1000_balanced = normalize_timeseries(p1000['balanced'].values)
-
-    p2500 = pd.read_csv('P_2500ev.csv', index_col='Unnamed: 0')
-    p2500.iloc[0:48] = p2500.iloc[48:96].values
-    p2500_immediate = normalize_timeseries(p2500['immediate'].values)
-    p2500_balanced = normalize_timeseries(p2500['balanced'].values)
-
-    p5000 = pd.read_csv('P_5000ev.csv', index_col='Unnamed: 0')
-    p5000.iloc[0:48] = p5000.iloc[48:96].values
-    p5000_immediate = normalize_timeseries(p5000['immediate'].values)
-    p5000_balanced = normalize_timeseries(p5000['balanced'].values)
-
-    # Concatenate all series to study differences depending on profile count
-    immediate_norm = pd.concat([p500_immediate, p1000_immediate, p2500_immediate, p5000_immediate], axis=1)
-    immediate_norm.columns = ['500', '1000', '2500', '5000']
-
-    balanced_norm = pd.concat([p500_balanced, p1000_balanced, p2500_balanced, p5000_balanced], axis=1)
-    balanced_norm.columns = ['500', '1000', '2500', '5000']
-
-    return immediate_norm, balanced_norm
-
-
-def normalize_timeseries(input):
-    x = input.reshape(-1,1)
-    min_max_scaler = preprocessing.MinMaxScaler()
-    x_scaled = min_max_scaler.fit_transform(x)
-    x_norm = pd.DataFrame(x_scaled)
-
-    return x_norm
-
-
-def return_normalized_charging_series(path):
-    p = pd.read_csv(path, index_col='Unnamed: 0')
+def return_normalized_charging_series(df):
     # Cut off initial charging
-    p.iloc[0:48] = p.iloc[48:96].values
-    idx = pd.DatetimeIndex(p.index, freq='30min')
-    p.set_index(idx, inplace=True)
-    p_immediate = p['immediate']
-    p_balanced = p['balanced']
+    df.iloc[0:48] = df.iloc[48:96].values
+    idx = pd.DatetimeIndex(df.index, freq='30min')
+    df.set_index(idx, inplace=True)
+    p_immediate = df['immediate']
+    p_balanced = df['balanced']
+    p_23to8 = df['23to8']
+    p_0to24 = df['0to24']
 
     immediate_hourly = p_immediate.resample('H').sum()
     balanced_hourly = p_balanced.resample('H').sum()
+    hourly_23to8 = p_23to8.resample('H').sum()
+    hourly_0to24 = p_0to24.resample('H').sum()
 
     # Normalize Yearly energy use to 1
     immediate_norm = immediate_hourly * (1 / immediate_hourly.sum())
     balanced_norm = balanced_hourly * (1 / balanced_hourly.sum())
+    norm_23to8 =  hourly_23to8  * (1 / hourly_23to8 .sum())
+    norm_0to24 = hourly_0to24 * (1 / hourly_0to24.sum())
 
-    return immediate_norm, balanced_norm
+    P_sum_norm = pd.concat([immediate_norm, balanced_norm, norm_23to8, norm_0to24], axis=1)
+    smaller_zero = P_sum_norm < 0
+    P_sum_norm[smaller_zero] = 0
 
-
-def return_sum_power(path):
-    a = pd.read_csv(path)
-    a.set_index('Unnamed: 0', drop=True, inplace=True)
-    a.drop(a.index[0:3], inplace=True)
-    for bla in a.columns:
-        a[bla] = a[bla].astype(float)
-    cols = a.columns[126:151]
-    a = a[cols]
-    a = a.sum(axis=1)
-
-    return a
+    return P_sum_norm
 
 
-immediate_norm, balanced_norm = load_and_compare_charging_of_fleets()
+def return_sum_charging_power(path):
 
-# Load charging profiles and return normalized charging series
-immediate, balanced = return_normalized_charging_series('P_5000ev.csv')
+    fn = os.path.join(cfg.get("paths", "scenario_data"), 'sum_charging_power.csv')
 
-P_inst = 10 * 1e3 # 10 GWh
-P_immediate = immediate.multiply(P_inst)
-P_balanced = balanced.multiply(P_inst)
+    if not os.path.isfile(fn):
+        os.chdir(path)
+        dirs = os.listdir(os.getcwd())
+        result_dict = dict.fromkeys(dirs)
 
+        for dir in result_dict.keys():
+            path = os.path.join(os.getcwd(), dir)
+            result_dict[dir] = get_charging_profiles_from_database(path)
 
+        charging_types = result_dict[dir].columns
+        idx = result_dict[dir].index
+        P_sum = pd.DataFrame(index=idx, columns=charging_types)
+        len_series = len(result_dict[list(result_dict.keys())[0]]['immediate'])
 
-## Test if multiple runs lead to different results
-path1 = '/home/dbeier/git-projects/emobpy_examples/casestudy/csv/test_original/a_ts.csv'
-path2 = '/home/dbeier/git-projects/emobpy_examples/casestudy/csv/test_original/b_ts.csv'
-path3 = '/home/dbeier/git-projects/emobpy_examples/casestudy/csv/test_original/c_ts.csv'
+        for ch_type in charging_types:
+            sum_temp = pd.Series(np.zeros(shape=len_series), index=idx)
 
-a = return_sum_power(path1)
-b = return_sum_power(path2)
-c = return_sum_power(path3)
+            for key in result_dict.keys():
+                P_tmp = result_dict[key][ch_type]
+                sum_temp = sum_temp.add(P_tmp, fill_value=0)
 
-mean1 = (a + b + c) / 3
+            P_sum[ch_type] = sum_temp
 
-# Plot depicts charging profiles for immediate charging for three test runs (with random seed)
-plt.figure()
-plt.plot(a.values), plt.plot(b.values), plt.plot(c.values), plt.plot(mean1.values, LineWidth=3.5)
+        P_sum.to_csv(fn)
 
-path1 = '/home/dbeier/git-projects/emobpy_examples/casestudy/csv/test_random/a_ts.csv'
-path2 = '/home/dbeier/git-projects/emobpy_examples/casestudy/csv/test_random/b_ts.csv'
-path3 = '/home/dbeier/git-projects/emobpy_examples/casestudy/csv/test_random/c_ts.csv'
+    else:
+        P_sum = pd.read_csv(fn)
+        P_sum.set_index('Unnamed: 0', drop=True, inplace=True)
 
-ar = return_sum_power(path1)
-br = return_sum_power(path2)
-cr = return_sum_power(path3)
-mean2 = (ar + br + cr) / 3
-
-# Plot depicts charging profiles for immediate charging for three test runs (without random seed)
-plt.figure()
-plt.plot(ar.values), plt.plot(br.values), plt.plot(cr.values), plt.plot(mean2.values, LineWidth=3.5)
-
-plt.figure(), plt.plot(mean1.values), plt.plot(mean2.values)
-
-
-os.chdir('/home/dbeier/git-projects/emobpy_examples/casestudy')
-P1 = get_charging_profiles_from_database(os.getcwd() + '/multiple_runs/XXev1')
-P2 = get_charging_profiles_from_database(os.getcwd() + '/multiple_runs/XXev2')
-P3 = get_charging_profiles_from_database(os.getcwd() + '/multiple_runs/XXev3')
-P4 = get_charging_profiles_from_database(os.getcwd() + '/multiple_runs/XXev4')
-P5 = get_charging_profiles_from_database(os.getcwd() + '/multiple_runs/XXev5')
-P6 = get_charging_profiles_from_database(os.getcwd() + '/multiple_runs/XXev6')
+    return P_sum
 
 
 
-str = '0to24'
-mean = (P1[str] + P2[str] + P3[str] + P4[str] + P5[str] + P6[str]) / 6
-plt.figure(1), plt.plot(P1[str]), plt.plot(P2[str]), plt.plot(P3[str]), plt.plot(P4[str]), plt.plot(P5[str]), \
-plt.plot(P6[str]), plt.plot(mean, LineWidth=3.5), plt.legend()
+path_to_data = '/home/dbeier/git-projects/emobpy_examples/casestudy/multiple_runs'
+
+P_sum = return_sum_charging_power(path_to_data)
+
+P_sum_norm = return_normalized_charging_series(P_sum)
