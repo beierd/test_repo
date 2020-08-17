@@ -1,11 +1,24 @@
-from emobpy import Mobility, Availability, Charging, DataBase
+from emobpy import DataBase
 import pandas as pd
-import snippets, os
+import os
 import numpy as np
 from reegis import config as cfg
 
 
 def get_charging_profiles_from_database(path):
+    """
+    This function can be used to process results obtained with the library emobpy by DIW Berlin.
+    It takes a path to data as input and returns the summed charging power.
+
+    Parameters
+    ----------
+    path: String
+        Path to a folder with stored driving, availability and charging profiles
+
+    Returns: DataFrame
+        Summed charging power for 4 different charging strategies
+    -------
+    """
 
     # Load profiles from Files
     manager = DataBase(path)
@@ -67,13 +80,24 @@ def get_charging_profiles_from_database(path):
     P_sum = pd.concat([P_immediate, P_balanced, P_23to8, P_0to24], axis=1)
     P_sum.columns = ['immediate', 'balanced', '23to8', '0to24']
 
-    # P_sum = pd.concat([P_immediate, P_balanced], axis=1)
-    # P_sum.columns = ['immediate', 'balanced']
-
     return P_sum
 
 
 def return_normalized_charging_series(df):
+    """
+    This function normalizes profiles so that the sum of the timeseries is 1. The profiles can then be scaled to
+    a user defined energy consumption of BEV charging.
+
+    Parameters
+    ----------
+    df: DataFrame
+        Dataframe with 4 charging timereries
+
+    Returns: DataFrame
+        Normalized charging series
+    -------
+    """
+
     # Cut off initial charging
     df.iloc[0:48] = df.iloc[48:96].values
     idx = pd.DatetimeIndex(df.index, freq='30min')
@@ -83,6 +107,7 @@ def return_normalized_charging_series(df):
     p_23to8 = df['23to8']
     p_0to24 = df['0to24']
 
+    # Resample to hourly values
     immediate_hourly = p_immediate.resample('H').sum()
     balanced_hourly = p_balanced.resample('H').sum()
     hourly_23to8 = p_23to8.resample('H').sum()
@@ -101,8 +126,20 @@ def return_normalized_charging_series(df):
     return P_sum_norm
 
 
-def return_sum_charging_power(path):
+def return_sum_charging_power(path=None):
+    """
+    This function returns a DataFrame with summed charging power series. Prerequisite is the calculation of profiles
+    with the library emobpy by DIW Berlin. If the function is run for the first time a path to data must be provided.
 
+    Parameters
+    ----------
+    path: String
+        Path to a directory containing at least one folder with charging power series files.
+
+    Returns: DataFrame
+        Summed charging profiles
+    -------
+    """
     fn = os.path.join(cfg.get("paths", "scenario_data"), 'sum_charging_power.csv')
 
     if not os.path.isfile(fn):
@@ -139,7 +176,5 @@ def return_sum_charging_power(path):
 
 
 path_to_data = '/home/dbeier/git-projects/emobpy_examples/casestudy/multiple_runs'
-
 P_sum = return_sum_charging_power(path_to_data)
-
 P_sum_norm = return_normalized_charging_series(P_sum)
