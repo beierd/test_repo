@@ -48,6 +48,7 @@ def change_year(path_to_file, search_string, path_out, year):
   output_file = open(path_out, "wb")
   output_file.write(dump(yaml_doc=yaml_doc))
 
+
 def load_agora_from_owncloud(path_to_data='ownCloud/FhG-owncloud-Quarree-AB3/Daten/Agora/', year=2015):
 
     # selecting spreadsheet
@@ -248,7 +249,6 @@ def get_hp_shares():
     return share_hp
 
 
-
 def load_and_compare_charging_of_fleets():
     # Read files, cut off initial charging and normalize between 0 and 1
     p500 = pd.read_csv('P_500ev.csv', index_col='Unnamed: 0')
@@ -288,6 +288,7 @@ def normalize_timeseries(input):
     x_norm = pd.DataFrame(x_scaled)
 
     return x_norm
+
 
 def return_sum_power(path):
     a = pd.read_csv(path)

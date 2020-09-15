@@ -36,7 +36,7 @@ p_per_qm_pv = 200 / 1e6 # 200 W/m² Fläche -> eta=20%
 P_max_wind = suitable_area['wind_area'] * p_per_qm_wind
 P_max_pv = suitable_area['pv_area'] * p_per_qm_pv
 
-P_wind_pv = Land_Availability_GLAES.aggregate_capacity_by_region(regions)
+#P_wind_pv = Land_Availability_GLAES.aggregate_capacity_by_region(regions)
 
 
 calc_de17 = True
