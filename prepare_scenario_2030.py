@@ -6,7 +6,7 @@ from deflex import geometries as geo_deflex
 from reegis import land_availability_glaes, demand_disaggregator, entsoe, demand_heat
 from scenario_builder import emobpy_processing
 import pandas as pd
-
+import os
 
 # Set parameters and get data needed for all scenarios
 nuts3_index = data.database_shapes().index
@@ -160,6 +160,25 @@ scen_dict_NEP['elc_series'] = elc_consumption_NEP
 scen_dict_NEP['lt_heat_series'] = lt_heat_profile_NEP - lt_heat_profile_NEP_HP
 scen_dict_NEP['ht_heat_series'] = ht_heat_profile_NEP
 scen_dict_NEP['volatile_source'] = NEP_capacities
+
+path_to_file_NEP = os.path.join(os.getcwd(), 'NEP2030_scenario.xlsx')
+path_to_file_SQ = os.path.join(os.getcwd(), 'SQ_scenario.xlsx')
+
+# Write Dictionary to
+with pd.ExcelWriter(path_to_file_NEP) as writer:
+    #scen_dict_NEP['commodity_source'].to_excel(writer, sheet='commodity_source')
+    scen_dict_NEP['elc_series'].to_excel(writer, sheet_name='demand_series_elc')
+    scen_dict_NEP['lt_heat_series'].to_excel(writer, sheet_name='demand_series_lt_heat')
+    scen_dict_NEP['ht_heat_series'].to_excel(writer, sheet_name='demand_series_ht_heat')
+    scen_dict_NEP['volatile_source'].to_excel(writer, sheet_name='volatile_source')
+    scen_dict_NEP['commodity_source'].to_excel(writer, sheet_name='commodity_source')
+
+
+with pd.ExcelWriter(path_to_file_SQ) as writer:
+    scen_dict_sq['elc_series'].to_excel(writer, sheet_name='demand_series_elc')
+    scen_dict_sq['lt_heat_series'].to_excel(writer, sheet_name='demand_series_lt_heat')
+    scen_dict_sq['ht_heat_series'].to_excel(writer, sheet_name='demand_series_ht_heat')
+    scen_dict_sq['commodity_source'].to_excel(writer, sheet_name='commodity_source')
 
 
 del reg, share, year, res_potential, region_COP, COP, COP_water, E_emob, E_wp, NEP_capacities, a, b,\

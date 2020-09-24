@@ -13,7 +13,9 @@ logger.define_logging(logfile='oemof.log',
 # Rechne NEP 1-Knoten-Szenario
 #main.model_scenario('/home/dbeier/reegis/scenarios/deflex/2014/deflex_2014_de02_NEP.xls', name="NEP2030", rmap="de02", year=2014)
 
-main.model_scenario('/home/dbeier/reegis/scenarios/deflex/2014/deflex_2014_de02.xls', name="de02", rmap="de02", year=2014)
+main.model_scenario('/home/dbeier/reegis/scenarios/deflex/2014/deflex_2014_de02.xls')
+#main.model_scenario('/home/dbeier/reegis/scenarios/deflex/2014/deflex_2014_de21_no-heat_no-reg-merit.xls')
+
 
 #scenario_tools.DeflexScenario()
 path= '/home/dbeier/reegis/scenarios/deflex/2014/results_cbc/NEP2030.esys'
